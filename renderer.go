@@ -12,8 +12,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/tdewolff/minify/js"
 
 	"github.com/tdewolff/minify/json"
@@ -138,12 +136,10 @@ func (r *Renderer) ExecuteTemplate(wr io.Writer, name string, data interface{}) 
 		if r.htmlplates == nil {
 			return errors.New("no HTML templates found")
 		}
-		log.Debug().Str("name", name).Msg("executing HTML render")
 		return r.htmlplates.ExecuteTemplate(wr, name, data)
 	}
 	if r.templates == nil {
 		return errors.New("no text templates found")
 	}
-	log.Debug().Str("name", name).Msg("executing unsafe render")
 	return r.templates.ExecuteTemplate(wr, name, data)
 }
