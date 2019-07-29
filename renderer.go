@@ -2,6 +2,7 @@ package template
 
 import (
 	"errors"
+	"fmt"
 	htmlplate "html/template"
 	"io"
 	"io/ioutil"
@@ -40,6 +41,15 @@ func NewRenderer() *Renderer {
 	min.AddFuncRegexp(regexp.MustCompile("[/+]json$"), json.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("[/+]xml$"), xml.Minify)
 	return &Renderer{minifier: min}
+}
+
+func existsOrError(fspc string) error {
+	if _, err := os.Stat(fspc); err != nil {
+		if os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Renderer) processFile(basepath string, path string, finfo os.FileInfo, err error) error {
@@ -103,6 +113,10 @@ func (r *Renderer) storeOther(name string, data []byte) error {
 // HTML files are parsed into html/template templates, other files are parsed into
 // text/template templates.
 func (r *Renderer) ParseFiles(basepath string) error {
+	err := existsOrError(basepath)
+	if err != nil {
+		return fmt.Errorf("asked to scan template directory %s which does not exist", basepath)
+	}
 	r.paths = append(r.paths, basepath)
 	return filepath.Walk(basepath, func(path string, finfo os.FileInfo, err error) error {
 		return r.processFile(basepath, path, finfo, err)
