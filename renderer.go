@@ -1,7 +1,6 @@
 package template
 
 import (
-	"errors"
 	"fmt"
 	htmlplate "html/template"
 	"io"
@@ -10,150 +9,151 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
-	"text/template"
-
-	"github.com/tdewolff/minify/js"
-
-	"github.com/tdewolff/minify/json"
-	"github.com/tdewolff/minify/xml"
-
-	"github.com/tdewolff/minify/css"
-	"github.com/tdewolff/minify/html"
 
 	"github.com/tdewolff/minify"
+	"github.com/tdewolff/minify/css"
+	"github.com/tdewolff/minify/html"
+	"github.com/tdewolff/minify/js"
+	"github.com/tdewolff/minify/json"
+	"github.com/tdewolff/minify/xml"
 )
 
-// Renderer is an object which loads, minifies and renders templates for CSS, JS, HTML, SVG, and XML.
-type Renderer struct {
-	minifier   *minify.M
-	paths      []string
-	templates  *template.Template
-	htmlplates *htmlplate.Template
+// TemplateSet represents a set of 1 or more Go templates.
+type TemplateSet struct {
+	name      string
+	globs     []string
+	renderer  *Renderer
+	templates *htmlplate.Template
 }
 
-// NewRenderer returns a Renderer ready for use.
-func NewRenderer() *Renderer {
+// Renderer is an object for loading, parsing, minifying and rendering HTML templates.
+type Renderer struct {
+	basePath     string
+	templateSets map[string]*TemplateSet
+	// Minify is true if the template content should be minified. It's possible that the minification code could have
+	// problems with complex Go templates, but I've not encountered any problems of that nature so far.
+	Minify       bool
+	// Live is true if the template sets should be reloaded whenever Execute is used.
+	// This is obviously a very bad idea in production and should only be used for development.
+	Live         bool
+	minifier     *minify.M
+}
+
+// NewRenderer returns an initialized Renderer. The basepath is used to locate all files subsequently added via Load().
+func NewRenderer(basepath string) *Renderer {
+	tm := &Renderer{basePath: basepath, templateSets: make(map[string]*TemplateSet)}
 	min := minify.New()
 	min.AddFunc("text/html", html.Minify)
 	min.AddFunc("text/css", css.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("[/+]json$"), json.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("[/+]xml$"), xml.Minify)
-	return &Renderer{minifier: min}
+	tm.minifier = min
+	return tm
 }
 
-func existsOrError(fspc string) error {
-	if _, err := os.Stat(fspc); err != nil {
-		if os.IsNotExist(err) {
-			return err
+// Load loads one or more template files into the specified template set.
+func (tm *Renderer) Load(templateSet string, fileglobs ... string) error {
+	thing := &TemplateSet{
+		name:     templateSet,
+		globs:    fileglobs,
+		renderer: tm,
+	}
+	tm.templateSets[templateSet] = thing
+	return thing.Load()
+}
+
+// execute executes the named template from the named template set.
+func (tm *Renderer) Execute(templateSet string, wr io.Writer, tmplname string, data interface{}) error {
+	var err error
+	tmpl, ok := tm.templateSets[templateSet]
+	if ok {
+		if tm.Live {
+			err = tmpl.Load()
+			if err != nil {
+				return err
+			}
 		}
+		err = tmpl.execute(wr, tmplname, data)
+	} else {
+		err = fmt.Errorf("no such template file set %s", templateSet)
 	}
-	return nil
+	return err
 }
 
-func (r *Renderer) processFile(basepath string, path string, finfo os.FileInfo, err error) error {
-	if finfo.IsDir() {
-		return nil
+// Reload reloads the named template set.
+func (tm *Renderer) Reload(templateSet string) error {
+	var err error
+	thing, ok := tm.templateSets[templateSet]
+	if ok {
+		err = thing.Load()
+	} else {
+		err = fmt.Errorf("reload failed, file set %s unknown", templateSet)
 	}
-	rel, err := filepath.Rel(basepath, path)
-	if err != nil {
-		return err
+	return err
+}
+
+// minify handles minification of loaded file data
+func (tm *Renderer) minify(filename string, dat []byte) (string, error) {
+	if !tm.Minify {
+		return string(dat), nil
 	}
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	ext := filepath.Ext(path)
+	var err error
+	ext := filepath.Ext(filename)
 	mtype := mime.TypeByExtension(ext)
-	_, _, mfn := r.minifier.Match(mtype)
-	var dat []byte
+	_, _, mfn := tm.minifier.Match(mtype)
 	if mfn != nil {
-		dat, err = r.minifier.Bytes(mtype, data)
-	} else {
-		dat = data
-		err = nil
+		dat, err = tm.minifier.Bytes(mtype, dat)
 	}
-	if err != nil {
-		return err
-	}
-
-	if strings.HasPrefix(mtype, "text/html") {
-		return r.storeHTML(rel, dat)
-	}
-	return r.storeOther(rel, dat)
+	return string(dat), err
 }
 
-func (r *Renderer) storeHTML(name string, data []byte) error {
+// Load causes a template set to be loaded from the files in the filesystem.
+// Minification is performed if configured, and the template files are compiled.
+func (th *TemplateSet) Load() error {
 	var tmpl *htmlplate.Template
-	if r.htmlplates == nil {
-		tmpl = htmlplate.New(name)
-		r.htmlplates = tmpl
-	} else {
-		tmpl = r.htmlplates.New(name)
-	}
-	_, err := tmpl.Parse(string(data))
-	return err
-}
-
-func (r *Renderer) storeOther(name string, data []byte) error {
-	var tmpl *template.Template
-	if r.templates == nil {
-		tmpl = template.New(name)
-		r.templates = tmpl
-	} else {
-		tmpl = r.templates.New(name)
-	}
-	_, err := tmpl.Parse(string(data))
-	return err
-}
-
-// ParseFiles loads, minifies and parses all template files under the supplied base path.
-// Each template is named according to its relative path under the base path.
-// HTML files are parsed into html/template templates, other files are parsed into
-// text/template templates.
-func (r *Renderer) ParseFiles(basepath string) error {
-	err := existsOrError(basepath)
-	if err != nil {
-		return fmt.Errorf("asked to scan template directory %s which does not exist", basepath)
-	}
-	r.paths = append(r.paths, basepath)
-	return filepath.Walk(basepath, func(path string, finfo os.FileInfo, err error) error {
-		return r.processFile(basepath, path, finfo, err)
-	})
-}
-
-// Reload causes the Renderer to rescan all of the directories it has been told to scan before,
-// and reload all of the template files.
-//
-// This method is intended for use during development. It should not be used in production, as
-// the cached template update process is unsafe and template execution in other goroutines
-// may fail while the files are being reloaded.
-func (r *Renderer) Reload() error {
-	r.templates = nil
-	r.htmlplates = nil
-	for _, basepath := range r.paths {
-		err := r.ParseFiles(basepath)
+	for _, glob := range th.globs {
+		globpath := filepath.Join(th.renderer.basePath, glob)
+		matches, err := filepath.Glob(globpath)
 		if err != nil {
 			return err
 		}
+		for _, filename := range matches {
+			fi, err := os.Stat(filename)
+			if err != nil {
+				return err
+			}
+			if fi.IsDir() {
+				continue
+			}
+			name, err := filepath.Rel(th.renderer.basePath, filename)
+			if err != nil {
+				return err
+			}
+			data, err := ioutil.ReadFile(filename)
+			if err != nil {
+				return err
+			}
+			dat, err := th.renderer.minify(filename, data)
+			if err != nil {
+				return err
+			}
+			if tmpl == nil {
+				tmpl, err = htmlplate.New(name).Parse(dat)
+			} else {
+				tmpl, err = tmpl.New(name).Parse(dat)
+			}
+			if err != nil {
+				return err
+			}
+		}
 	}
+	th.templates = tmpl
 	return nil
 }
 
-// ExecuteTemplate executes the template with the specified name, passing it the provided data, and sending
-// the output to the provided io.Writer.
-func (r *Renderer) ExecuteTemplate(wr io.Writer, name string, data interface{}) error {
-	ext := filepath.Ext(name)
-	mtype := mime.TypeByExtension(ext)
-	if strings.HasPrefix(mtype, "text/html") {
-		if r.htmlplates == nil {
-			return errors.New("no HTML templates found")
-		}
-		return r.htmlplates.ExecuteTemplate(wr, name, data)
-	}
-	if r.templates == nil {
-		return errors.New("no text templates found")
-	}
-	return r.templates.ExecuteTemplate(wr, name, data)
+// execute executes an individual template set.
+func (th *TemplateSet) execute(wr io.Writer, tmplname string, data interface{}) error {
+	return th.templates.ExecuteTemplate(wr, tmplname, data)
 }
+

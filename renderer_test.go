@@ -10,7 +10,7 @@ import (
 
 func testRender(rdr *template.Renderer, tmplname string, data interface{}) (string, error) {
 	var result strings.Builder
-	err := rdr.ExecuteTemplate(&result, tmplname, data)
+	err := rdr.Execute("test", &result, tmplname, data)
 	return result.String(), err
 }
 
@@ -21,9 +21,11 @@ const expectedJS = `function nth(o){return o+(['st','nd','rd'][(o+'').match(/1?\
 const expectedSafety = `<p>Written by &lt;script&gt;alert(&#39;You have been pwned&#39;);&lt;/script&gt;.`
 
 func TestRenderHTML(t *testing.T) {
-	rdr := template.NewRenderer()
-	rdr.ParseFiles("testdata")
-
+	rdr := template.NewRenderer("testdata")
+	err := rdr.Load("test", "*", "subdir/*")
+	if err != nil {
+		t.Fatal(err)
+	}
 	btn, err := testRender(rdr, "subdir/button.html", nil)
 	if err != nil {
 		t.Errorf("button.html render failed: %v", err)
@@ -31,7 +33,6 @@ func TestRenderHTML(t *testing.T) {
 	if btn != expectedButton {
 		t.Errorf("button.html render failed, expected '%s' got '%s'", expectedButton, btn)
 	}
-
 	html, err := testRender(rdr, "index.html", "Hello world")
 	if err != nil {
 		t.Errorf("index.html render failed: %v", err)
@@ -42,8 +43,8 @@ func TestRenderHTML(t *testing.T) {
 }
 
 func TestRenderSafety(t *testing.T) {
-	rdr := template.NewRenderer()
-	rdr.ParseFiles("testdata")
+	rdr := template.NewRenderer("testdata", true)
+	err := rdr.Load("test", "*", "subdir/*")
 	html, err := testRender(rdr, "footer.html", "<script>alert('You have been pwned');</script>")
 	if err != nil {
 		t.Errorf("footer.html render with injected tags failed: %v", err)
@@ -54,8 +55,8 @@ func TestRenderSafety(t *testing.T) {
 }
 
 func TestRenderCSS(t *testing.T) {
-	rdr := template.NewRenderer()
-	rdr.ParseFiles("testdata")
+	rdr := template.NewRenderer("testdata", true)
+	err := rdr.Load("test", "*", "subdir/*")
 
 	css, err := testRender(rdr, "button.css", nil)
 	if err != nil {
@@ -67,8 +68,8 @@ func TestRenderCSS(t *testing.T) {
 }
 
 func TestRenderJS(t *testing.T) {
-	rdr := template.NewRenderer()
-	rdr.ParseFiles("testdata")
+	rdr := template.NewRenderer("testdata")
+	err := rdr.Load("test", "*", "subdir/*")
 
 	js, err := testRender(rdr, "nth.js", nil)
 	if err != nil {
@@ -83,12 +84,14 @@ const TMP1 = "<button class=\"btn ds-button\">Primary</button>"
 const TMP2 = "<a class=\"btn ds-button\">Secondary</a>"
 
 func TestReload(t *testing.T) {
-	err := ioutil.WriteFile("testdata/reload.html", []byte(TMP1), 0644)
+	rdr := template.NewRenderer("testdata")
+	err := rdr.Load("test", "*", "subdir/*")
+	rdr.Live = true
+
+	err = ioutil.WriteFile("testdata/reload.html", []byte(TMP1), 0644)
 	if err != nil {
 		t.Errorf("reload test failed: %v", err)
 	}
-	rdr := template.NewRenderer()
-	rdr.ParseFiles("testdata")
 	html, err := testRender(rdr, "reload.html", nil)
 	if err != nil {
 		t.Errorf("reload test render failed: %v", err)
@@ -100,7 +103,6 @@ func TestReload(t *testing.T) {
 	if err != nil {
 		t.Errorf("reload test failed: %v", err)
 	}
-	rdr.Reload()
 	html, err = testRender(rdr, "reload.html", nil)
 	if err != nil {
 		t.Errorf("reload test render failed: %v", err)
