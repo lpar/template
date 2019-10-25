@@ -40,16 +40,16 @@ type Renderer struct {
 }
 
 // NewRenderer returns an initialized Renderer. The basepath is used to locate all files subsequently added via Load().
-func NewRenderer(basepath string) *Renderer {
-	tm := &Renderer{basePath: basepath, templateSets: make(map[string]*TemplateSet)}
+func NewRenderer(basepath string) Renderer {
+	ren := Renderer{basePath: basepath, templateSets: make(map[string]*TemplateSet)}
 	min := minify.New()
 	min.AddFunc("text/html", html.Minify)
 	min.AddFunc("text/css", css.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("[/+]json$"), json.Minify)
 	min.AddFuncRegexp(regexp.MustCompile("[/+]xml$"), xml.Minify)
-	tm.minifier = min
-	return tm
+	ren.minifier = min
+	return ren
 }
 
 // Load loads one or more template files into the specified template set.
@@ -64,7 +64,7 @@ func (tm *Renderer) Load(templateSet string, fileglobs ... string) error {
 }
 
 // execute executes the named template from the named template set.
-func (tm *Renderer) Execute(templateSet string, wr io.Writer, tmplname string, data interface{}) error {
+func (tm Renderer) Execute(templateSet string, wr io.Writer, tmplname string, data interface{}) error {
 	var err error
 	tmpl, ok := tm.templateSets[templateSet]
 	if ok {
@@ -82,7 +82,7 @@ func (tm *Renderer) Execute(templateSet string, wr io.Writer, tmplname string, d
 }
 
 // Reload reloads the named template set.
-func (tm *Renderer) Reload(templateSet string) error {
+func (tm Renderer) Reload(templateSet string) error {
 	var err error
 	thing, ok := tm.templateSets[templateSet]
 	if ok {
@@ -94,7 +94,7 @@ func (tm *Renderer) Reload(templateSet string) error {
 }
 
 // minify handles minification of loaded file data
-func (tm *Renderer) minify(filename string, dat []byte) (string, error) {
+func (tm Renderer) minify(filename string, dat []byte) (string, error) {
 	if !tm.Minify {
 		return string(dat), nil
 	}
@@ -153,7 +153,7 @@ func (th *TemplateSet) Load() error {
 }
 
 // execute executes an individual template set.
-func (th *TemplateSet) execute(wr io.Writer, tmplname string, data interface{}) error {
+func (th TemplateSet) execute(wr io.Writer, tmplname string, data interface{}) error {
 	return th.templates.ExecuteTemplate(wr, tmplname, data)
 }
 

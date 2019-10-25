@@ -8,7 +8,7 @@ import (
 	"github.com/lpar/template"
 )
 
-func testRender(rdr *template.Renderer, tmplname string, data interface{}) (string, error) {
+func testRender(rdr template.Renderer, tmplname string, data interface{}) (string, error) {
 	var result strings.Builder
 	err := rdr.Execute("test", &result, tmplname, data)
 	return result.String(), err
@@ -22,6 +22,7 @@ const expectedSafety = `<p>Written by &lt;script&gt;alert(&#39;You have been pwn
 
 func TestRenderHTML(t *testing.T) {
 	rdr := template.NewRenderer("testdata")
+	rdr.Minify = true
 	err := rdr.Load("test", "*", "subdir/*")
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +44,8 @@ func TestRenderHTML(t *testing.T) {
 }
 
 func TestRenderSafety(t *testing.T) {
-	rdr := template.NewRenderer("testdata", true)
+	rdr := template.NewRenderer("testdata")
+	rdr.Minify = true
 	err := rdr.Load("test", "*", "subdir/*")
 	html, err := testRender(rdr, "footer.html", "<script>alert('You have been pwned');</script>")
 	if err != nil {
@@ -55,7 +57,8 @@ func TestRenderSafety(t *testing.T) {
 }
 
 func TestRenderCSS(t *testing.T) {
-	rdr := template.NewRenderer("testdata", true)
+	rdr := template.NewRenderer("testdata")
+	rdr.Minify = true
 	err := rdr.Load("test", "*", "subdir/*")
 
 	css, err := testRender(rdr, "button.css", nil)
@@ -69,6 +72,7 @@ func TestRenderCSS(t *testing.T) {
 
 func TestRenderJS(t *testing.T) {
 	rdr := template.NewRenderer("testdata")
+	rdr.Minify = true
 	err := rdr.Load("test", "*", "subdir/*")
 
 	js, err := testRender(rdr, "nth.js", nil)
@@ -85,6 +89,7 @@ const TMP2 = "<a class=\"btn ds-button\">Secondary</a>"
 
 func TestReload(t *testing.T) {
 	rdr := template.NewRenderer("testdata")
+	rdr.Minify = true
 	err := rdr.Load("test", "*", "subdir/*")
 	rdr.Live = true
 
