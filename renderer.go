@@ -37,6 +37,7 @@ type Renderer struct {
 	// This is obviously a very bad idea in production and should only be used for development.
 	Live         bool
 	minifier     *minify.M
+	funcmap htmlplate.FuncMap
 }
 
 // NewRenderer returns an initialized Renderer. The basepath is used to locate all files subsequently added via Load().
@@ -52,6 +53,11 @@ func NewRenderer(basepath string) Renderer {
 	return ren
 }
 
+// Funcs sets the function map to be used for all subsequent template load operations.
+func (tm *Renderer) Funcs(fm htmlplate.FuncMap) {
+	tm.funcmap = fm
+}
+
 // Load loads one or more template files into the specified template set.
 func (tm *Renderer) Load(templateSet string, fileglobs ... string) error {
 	thing := &TemplateSet{
@@ -63,7 +69,7 @@ func (tm *Renderer) Load(templateSet string, fileglobs ... string) error {
 	return thing.Load()
 }
 
-// execute executes the named template from the named template set.
+// Execute executes the named template from the named template set.
 func (tm Renderer) Execute(templateSet string, wr io.Writer, tmplname string, data interface{}) error {
 	var err error
 	tmpl, ok := tm.templateSets[templateSet]
@@ -139,7 +145,12 @@ func (th *TemplateSet) Load() error {
 				return err
 			}
 			if tmpl == nil {
-				tmpl, err = htmlplate.New(name).Parse(dat)
+				fmap := th.renderer.funcmap
+				if fmap != nil {
+					tmpl, err = htmlplate.New(name).Funcs(th.renderer.funcmap).Parse(dat)
+				} else {
+					tmpl, err = htmlplate.New(name).Parse(dat)
+				}
 			} else {
 				tmpl, err = tmpl.New(name).Parse(dat)
 			}
