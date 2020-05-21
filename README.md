@@ -1,7 +1,7 @@
 
 # lpar/template
 
-[![GoDoc](https://godoc.org/github.com/lpar/template?status.svg)](https://godoc.org/github.com/lpar/hugo)
+[![GoDoc](https://godoc.org/github.com/lpar/template?status.svg)](https://godoc.org/github.com/lpar/template)
 
 This is a quick wrapper for Go's `text/template` and `html/template`, providing a higher level template manager for
 web applications.
