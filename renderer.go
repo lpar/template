@@ -1,6 +1,7 @@
 package template
 
 import (
+	"errors"
 	"fmt"
 	htmlplate "html/template"
 	"io"
@@ -165,6 +166,9 @@ func (th *TemplateSet) Load() error {
 
 // execute executes an individual template set.
 func (th TemplateSet) execute(wr io.Writer, tmplname string, data interface{}) error {
+	if th.templates == nil {
+		return errors.New("no templates in template set")
+	}
 	return th.templates.ExecuteTemplate(wr, tmplname, data)
 }
 
